@@ -1,17 +1,9 @@
 // =============================================
 // YARNY — COMPLETE BUG-FIXED SCRIPT
 // =============================================
-// FIXES APPLIED:
-// 1. showToast() + togglePassword() defined BEFORE anything calls them
-// 2. Auth: no auto-login on page load (stale session cleared)
-// 3. Wishlist: stopImmediatePropagation so QV doesn't intercept heart clicks
-// 4. QuickView: REMOVED capture-phase stopPropagation that killed Add to Bag onclick
-// 5. Cart checkout: added delay so cart drawer closes before checkout opens
-// 6. Cart add: shows toast + opens auth if not logged in
-// 7. Form .active display fix
 
 // =============================================
-// 0. GLOBAL HELPERS (must be first — HTML onclick refs these)
+// 0. TOAST NOTIFICATION (was MISSING — caused ReferenceError)
 // =============================================
 function showToast(message, type = 'success') {
     const toast = document.getElementById('welcomeToast');
@@ -23,6 +15,9 @@ function showToast(message, type = 'success') {
     toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 3200);
 }
 
+// =============================================
+// 0b. TOGGLE PASSWORD (referenced in HTML onclick but was missing)
+// =============================================
 function togglePassword(inputId, iconEl) {
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -128,7 +123,7 @@ document.querySelectorAll('.smooth-link').forEach(anchor => {
 // =============================================
 // 4. NAVBAR SCROLL BEHAVIOR
 // =============================================
-const DARK_SECTIONS = ['showcase', 'special', 'contact'];
+const DARK_SECTIONS = ['special'];
 
 window.addEventListener('scroll', () => {
     const nav = document.querySelector('.navbar');
@@ -193,7 +188,7 @@ function initMagneticButtons() {
 }
 
 // =============================================
-// 7. AUTH MANAGER — BUG FIX: No auto-login
+// 7. AUTH MANAGER — FIXED: no auto-login, proper flows
 // =============================================
 const AuthManager = (() => {
     const authOverlay     = document.getElementById('authOverlay');
@@ -206,7 +201,7 @@ const AuthManager = (() => {
 
     let currentUser = null;
 
-    // ★ FIX: Start logged out
+    // FIX: Initialize isLoggedIn to false
     window.isLoggedIn = false;
 
     function save() {
@@ -220,13 +215,10 @@ const AuthManager = (() => {
     }
 
     function switchView(view) {
-        [loginSection, registerSection, profileSection].forEach(s => {
-            if (s) { s.classList.remove('active'); s.style.display = 'none'; }
-        });
+        [loginSection, registerSection, profileSection].forEach(s => s && s.classList.remove('active'));
         const map = { login: loginSection, register: registerSection, profile: profileSection };
         const el = map[view];
         if (!el) return;
-        el.style.display = 'block';
         el.classList.add('active');
         if (view !== 'profile') {
             el.style.opacity = 0;
@@ -305,7 +297,8 @@ const AuthManager = (() => {
     function closeDropdown() { userDropdown && userDropdown.classList.remove('open'); }
 
     function init() {
-        // ★ BUG FIX: Always start logged out — clear stale session
+        // BUG FIX: Clear any stale session — user should login fresh
+        // Remove this line if you want session persistence:
         localStorage.removeItem('yarny_session');
         window.isLoggedIn = false;
 
@@ -327,19 +320,26 @@ const AuthManager = (() => {
         });
 
         document.getElementById('ddLogout') && document.getElementById('ddLogout').addEventListener('click', e => {
-            e.preventDefault(); closeDropdown(); setLoggedOut();
+            e.preventDefault();
+            closeDropdown();
+            setLoggedOut();
         });
         document.getElementById('ddProfile') && document.getElementById('ddProfile').addEventListener('click', e => {
-            e.preventDefault(); closeDropdown();
+            e.preventDefault();
+            closeDropdown();
             authOverlay && authOverlay.classList.add('active');
-            switchView('profile'); lenis.stop();
+            switchView('profile');
+            lenis.stop();
         });
         document.getElementById('ddOrders') && document.getElementById('ddOrders').addEventListener('click', e => {
-            e.preventDefault(); closeDropdown(); showToast('Orders feature coming soon!');
+            e.preventDefault();
+            closeDropdown();
+            showToast('Orders feature coming soon!');
         });
 
         document.getElementById('closeAuth') && document.getElementById('closeAuth').addEventListener('click', () => {
-            authOverlay.classList.remove('active'); lenis.start();
+            authOverlay.classList.remove('active');
+            lenis.start();
         });
         authOverlay && authOverlay.addEventListener('click', e => {
             if (e.target === authOverlay) { authOverlay.classList.remove('active'); lenis.start(); }
@@ -367,7 +367,8 @@ const AuthManager = (() => {
             }
             if (!ok) return;
             setLoggedIn({ name: nameEl.value.trim(), email: emailEl.value.trim() });
-            authOverlay.classList.remove('active'); lenis.start();
+            authOverlay.classList.remove('active');
+            lenis.start();
         });
 
         // Login form
@@ -382,12 +383,15 @@ const AuthManager = (() => {
             if (!ok) return;
             const name = emailEl ? emailEl.value.split('@')[0] : 'Guest';
             setLoggedIn({ name, email: emailEl ? emailEl.value : '' });
-            authOverlay.classList.remove('active'); lenis.start();
+            authOverlay.classList.remove('active');
+            lenis.start();
         });
 
-        // Logout from profile
+        // Logout
         document.getElementById('logoutBtn') && document.getElementById('logoutBtn').addEventListener('click', () => {
-            authOverlay.classList.remove('active'); lenis.start(); setLoggedOut();
+            authOverlay.classList.remove('active');
+            lenis.start();
+            setLoggedOut();
         });
 
         // Password strength
@@ -402,7 +406,7 @@ const AuthManager = (() => {
             regPw.addEventListener('input', () => updateStrengthUI(regPw.value));
         }
 
-        // Field error spans
+        // Error spans
         document.querySelectorAll('#loginForm .modern-input, #registerForm .modern-input').forEach(wrap => {
             if (!wrap.querySelector('.field-error')) {
                 const span = document.createElement('span');
@@ -420,7 +424,7 @@ const AuthManager = (() => {
 })();
 
 // =============================================
-// 8. CART MANAGER — BUG FIX: checkout flow
+// 8. CART MANAGER — FIXED
 // =============================================
 const CartManager = (() => {
     const VAT_RATE = 0.20;
@@ -486,7 +490,7 @@ const CartManager = (() => {
                         <h4>${item.name}</h4>
                         <p>${item.price}</p>
                         <div class="cart-item-qty">
-                            <button class="qty-btn qty-dec" data-idx="${idx}">\u2212</button>
+                            <button class="qty-btn qty-dec" data-idx="${idx}">−</button>
                             <span class="qty-num">${item.qty}</span>
                             <button class="qty-btn qty-inc" data-idx="${idx}">+</button>
                         </div>
@@ -523,7 +527,7 @@ const CartManager = (() => {
     }
 
     function add(name, price, image, btnElement) {
-        // ★ BUG FIX: Show helpful message if not logged in
+        // BUG FIX: Require login but show a helpful message
         if (!window.isLoggedIn) {
             showToast('Please sign in to add items to your bag');
             document.getElementById('authOverlay').classList.add('active');
@@ -533,8 +537,11 @@ const CartManager = (() => {
         }
         const id = name.replace(/\s+/g, '_').toLowerCase();
         const existing = cartData.find(i => i.id === id);
-        if (existing) { existing.qty++; }
-        else { cartData.push({ id, name, price, image, qty: 1 }); }
+        if (existing) {
+            existing.qty++;
+        } else {
+            cartData.push({ id, name, price, image, qty: 1 });
+        }
         render();
 
         if (btnElement) {
@@ -549,6 +556,7 @@ const CartManager = (() => {
             cartIcon.style.transform = 'scale(1.3)';
             setTimeout(() => cartIcon.style.transform = 'scale(1)', 300);
         }
+
         showToast(name + ' added to bag!');
     }
 
@@ -560,7 +568,9 @@ const CartManager = (() => {
             row.style.opacity = '0';
             row.style.transition = '0.3s';
             setTimeout(() => { cartData.splice(idx, 1); render(); }, 300);
-        } else { cartData.splice(idx, 1); render(); }
+        } else {
+            cartData.splice(idx, 1); render();
+        }
     }
 
     function changeQty(idx, delta) {
@@ -575,17 +585,20 @@ const CartManager = (() => {
     function close() { drawer && drawer.classList.remove('open'); overlayBg && overlayBg.classList.remove('open'); lenis.start(); }
 
     function init() {
-        load(); render();
+        load();
+        render();
 
         document.getElementById('openCart') && document.getElementById('openCart').addEventListener('click', open);
         document.getElementById('closeCart') && document.getElementById('closeCart').addEventListener('click', close);
         overlayBg && overlayBg.addEventListener('click', close);
 
-        // ★ BUG FIX: Added delay + empty check for checkout
         document.getElementById('checkoutBtn') && document.getElementById('checkoutBtn').addEventListener('click', () => {
-            if (cartData.length === 0) { showToast('Your bag is empty!'); return; }
+            if (cartData.length === 0) {
+                showToast('Your bag is empty!');
+                return;
+            }
             close();
-            setTimeout(() => CheckoutManager.open(), 400);
+            setTimeout(() => CheckoutManager.open(), 350);
         });
 
         itemsEl && itemsEl.addEventListener('click', e => {
@@ -601,11 +614,12 @@ const CartManager = (() => {
     return { init, add, remove, changeQty, clear, open, close, getData, getSubtotal, getVAT, getShippingCost, render };
 })();
 
+// Expose globally
 window.addToCart = (name, price, image, btnEl) => CartManager.add(name, price, image, btnEl);
 window.removeFromCart = (idx) => CartManager.remove(idx);
 
 // =============================================
-// 15. WISHLIST MANAGER — BUG FIX: event handling
+// 15. WISHLIST MANAGER — FIXED
 // =============================================
 const WishlistManager = (() => {
     const STORAGE_KEY = 'yarny_wishlist';
@@ -680,8 +694,10 @@ const WishlistManager = (() => {
             }
             showToast('Added to wishlist \u2764');
         }
-        render(); save();
+        render();
+        save();
 
+        // Sync QV heart
         const qvBtn = document.getElementById('qvAddWishlist');
         if (qvBtn && qvBtn.dataset.id === id) {
             qvBtn.classList.toggle('active', items.has(id));
@@ -692,7 +708,8 @@ const WishlistManager = (() => {
     function close() { drawer && drawer.classList.remove('open'); overlayBg && overlayBg.classList.remove('open'); lenis.start(); }
 
     function init() {
-        load(); render();
+        load();
+        render();
 
         document.querySelectorAll('.btn-wishlist').forEach(btn => {
             if (items.has(btn.dataset.id)) btn.classList.add('active');
@@ -702,19 +719,18 @@ const WishlistManager = (() => {
         document.getElementById('closeWishlist') && document.getElementById('closeWishlist').addEventListener('click', close);
         overlayBg && overlayBg.addEventListener('click', close);
 
-        // ★ BUG FIX: Use stopImmediatePropagation so QV click handler doesn't also fire
+        // BUG FIX: Use stopImmediatePropagation to prevent QV from also firing
         document.addEventListener('click', e => {
             const btn = e.target.closest('.btn-wishlist');
             if (!btn) return;
-            e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
             const card = btn.closest('.pro-card');
             const name = card ? card.dataset.name : btn.dataset.id;
             const price = card ? card.dataset.price : '0';
             const img = card ? card.dataset.img : '';
-            const id = btn.dataset.id || (name && name.replace(/\s+/g, '_').toLowerCase());
-            const cleanPrice = String(price).replace(/[^0-9]/g, '');
+            const id = btn.dataset.id || (name && name.replace(/\s+/g,'_').toLowerCase());
+            const cleanPrice = String(price).replace(/[^0-9]/g,'');
             toggle(id, { id, name, price: cleanPrice, image: img });
         });
 
@@ -726,7 +742,8 @@ const WishlistManager = (() => {
                 const row = rm.closest('.wishlist-item-row');
                 if (row) { row.style.opacity = '0'; row.style.transform = 'translateX(10px)'; row.style.transition = '0.3s'; }
                 setTimeout(() => {
-                    items.delete(id); render(); save();
+                    items.delete(id);
+                    render(); save();
                     const cardBtn = document.querySelector('.btn-wishlist[data-id="' + id + '"]');
                     cardBtn && cardBtn.classList.remove('active');
                 }, 300);
@@ -751,7 +768,7 @@ const WishlistManager = (() => {
 })();
 
 // =============================================
-// 16. QUICK VIEW MANAGER — BUG FIX: no capture-phase blocking
+// 16. QUICK VIEW MANAGER — FIXED event handling
 // =============================================
 const QuickViewManager = (() => {
     const overlay = document.getElementById('qvOverlay');
@@ -771,7 +788,7 @@ const QuickViewManager = (() => {
         if (nameEl) nameEl.textContent = data.name;
         if (priceEl) priceEl.textContent = data.price + ' MAD';
         if (descEl) descEl.textContent = data.desc || 'A handmade luxury piece crafted with care in Tanger, Morocco.';
-        const wlId = data.id || (data.name && data.name.replace(/\s+/g, '_').toLowerCase());
+        const wlId = data.id || (data.name && data.name.replace(/\s+/g,'_').toLowerCase());
         if (addWish) {
             addWish.dataset.id = wlId;
             addWish.classList.toggle('active', WishlistManager.has(wlId));
@@ -793,12 +810,12 @@ const QuickViewManager = (() => {
         overlay && overlay.addEventListener('click', close);
         document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
-        // ★ BUG FIX: REMOVED the capture-phase stopPropagation that was killing
-        // Add to Bag onclick handlers. Now we just check and skip in the QV handler below.
+        // BUG FIX: REMOVED the capture-phase stopPropagation that was killing Add to Bag onclick
+        // Instead, the QV handler simply checks for these buttons and skips them
 
-        // Quick view — eye button OR card click (skipping add-to-bag, wishlist, qty buttons)
+        // Quick view — eye button click or card click
         document.addEventListener('click', e => {
-            // Skip interactive elements that have their own handlers
+            // Skip if clicking Add to Bag, wishlist, or qty buttons
             if (e.target.closest('.btn-liquid-gold') ||
                 e.target.closest('.btn-wishlist') ||
                 e.target.closest('.qty-btn') ||
@@ -816,9 +833,10 @@ const QuickViewManager = (() => {
             const desc = el.dataset.desc;
             if (!name) return;
 
-            open({ name, price, img: imgSrc, desc, id: name.replace(/\s+/g, '_').toLowerCase() });
+            open({ name, price, img: imgSrc, desc, id: name.replace(/\s+/g,'_').toLowerCase() });
         });
 
+        // Add to cart from QV
         addCart && addCart.addEventListener('click', () => {
             if (!current) return;
             CartManager.add(current.name, current.price + ' MAD', current.img, null);
@@ -826,9 +844,10 @@ const QuickViewManager = (() => {
             setTimeout(() => CartManager.open(), 350);
         });
 
+        // Wishlist from QV
         addWish && addWish.addEventListener('click', () => {
             if (!current) return;
-            const id = current.id || current.name.replace(/\s+/g, '_').toLowerCase();
+            const id = current.id || current.name.replace(/\s+/g,'_').toLowerCase();
             WishlistManager.toggle(id, { id, name: current.name, price: current.price, image: current.img });
             addWish.classList.toggle('active', WishlistManager.has(id));
         });
@@ -838,7 +857,7 @@ const QuickViewManager = (() => {
 })();
 
 // =============================================
-// 17. CHECKOUT MANAGER — BUG FIX: full flow works
+// 17. CHECKOUT MANAGER — FIXED
 // =============================================
 const CheckoutManager = (() => {
     const overlay = document.getElementById('checkoutOverlay');
@@ -964,7 +983,7 @@ const CheckoutManager = (() => {
         const expiry = document.getElementById('ckExpiry');
         expiry && expiry.addEventListener('input', e => {
             let val = e.target.value.replace(/\D/g, '').slice(0, 4);
-            if (val.length >= 2) val = val.slice(0, 2) + ' / ' + val.slice(2);
+            if (val.length >= 2) val = val.slice(0,2) + ' / ' + val.slice(2);
             e.target.value = val;
         });
     }
@@ -1029,7 +1048,8 @@ const CheckoutManager = (() => {
         });
 
         document.getElementById('ckDoneBtn') && document.getElementById('ckDoneBtn').addEventListener('click', () => {
-            close(); setStep(1);
+            close();
+            setStep(1);
         });
 
         initCardFormat();
@@ -1089,17 +1109,20 @@ function initAnimations() {
         scrollTrigger: { trigger: '.marquee-strip', start: 'top 100%' }
     });
 
+    // Collection section animations
     if (document.querySelector('.coll-grid')) {
         gsap.fromTo('.coll-title',
             { y: 30, opacity: 0, clipPath: 'inset(0 0 100% 0)' },
             { y: 0, opacity: 1, clipPath: 'inset(0 0 0% 0)', duration: 1.0, ease: 'power4.out',
               scrollTrigger: { trigger: '.coll-header', start: 'top 88%' } }
         );
+
         gsap.fromTo('.coll-eyebrow-line',
             { scaleX: 0, transformOrigin: 'left' },
             { scaleX: 1, duration: 0.8, ease: 'power3.out',
               scrollTrigger: { trigger: '.coll-header', start: 'top 88%' } }
         );
+
         gsap.fromTo('.coll-header-right',
             { x: 40, opacity: 0 },
             { x: 0, opacity: 1, duration: 1.1, delay: 0.3, ease: 'power4.out',
@@ -1162,11 +1185,13 @@ function initAnimations() {
               }
             }
         );
+
         gsap.fromTo('.coll-stat-label',
             { y: 12, opacity: 0 },
             { y: 0, opacity: 1, duration: 0.55, stagger: 0.13, delay: 0.25, ease: 'power3.out',
               scrollTrigger: { trigger: '.coll-stats-strip', start: 'top 92%' } }
         );
+
         gsap.fromTo('.coll-stat-sep',
             { scaleY: 0, transformOrigin: 'top' },
             { scaleY: 1, duration: 0.7, stagger: 0.15, delay: 0.1, ease: 'power3.out',
@@ -1174,6 +1199,7 @@ function initAnimations() {
         );
     }
 
+    // Product grids
     document.querySelectorAll('.grid-4-strict').forEach(grid => {
         gsap.fromTo(grid.children,
             { y: 50, opacity: 0, filter: 'blur(6px)' },
@@ -1182,6 +1208,7 @@ function initAnimations() {
         );
     });
 
+    // Special order
     const vipTrigger = document.querySelector('.split-vip-3col') || document.querySelector('.split-vip');
     if (vipTrigger) {
         gsap.fromTo('.vip-img-panel',
@@ -1189,53 +1216,63 @@ function initAnimations() {
             { clipPath: 'inset(0 0% 0 0)', duration: 1.6, ease: 'power4.inOut',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-panel-img',
             { scale: 1.12 },
             { scale: 1.0, duration: 1.8, ease: 'power3.out',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-panel-title',
             { y: 40, opacity: 0 },
             { y: 0, opacity: 1, duration: 1.1, delay: 0.7, ease: 'power4.out',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-text-area',
             { x: -40, opacity: 0 },
             { x: 0, opacity: 1, duration: 1.1, delay: 0.2, ease: 'power4.out',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-step',
             { x: -25, opacity: 0 },
             { x: 0, opacity: 1, duration: 0.7, stagger: 0.13, delay: 0.6, ease: 'power3.out',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-form-container',
             { x: 50, opacity: 0 },
             { x: 0, opacity: 1, duration: 1.1, delay: 0.35, ease: 'power4.out',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-input-group',
             { y: 18, opacity: 0 },
             { y: 0, opacity: 1, duration: 0.6, stagger: 0.08, delay: 0.75, ease: 'power3.out',
               scrollTrigger: { trigger: vipTrigger, start: 'top 82%' } }
         );
+
         gsap.fromTo('.vip-swatch',
             { scale: 0, opacity: 0 },
             { scale: 1, opacity: 1, duration: 0.5, stagger: 0.03, delay: 0.9, ease: 'back.out(2)',
               scrollTrigger: { trigger: '.vip-color-section', start: 'top 90%' } }
         );
+
         gsap.to('.vip-ghost-text', {
             y: -40, ease: 'none',
             scrollTrigger: { trigger: '.bg-dark-vip', start: 'top bottom', end: 'bottom top', scrub: 1.5 }
         });
     }
 
+    // Artisan cards
     document.querySelectorAll('.artisan-card').forEach((card, i) => {
         gsap.fromTo(card,
             { y: 40, opacity: 0, scale: 0.96 },
             { y: 0, opacity: 1, scale: 1, duration: 0.85, delay: i * 0.1, ease: 'power4.out',
               scrollTrigger: { trigger: '.artisan-grid', start: 'top 85%' } }
         );
+
         const imgWrap = card.querySelector('.artisan-img-wrap');
         if (imgWrap) {
             gsap.fromTo(imgWrap,
@@ -1244,6 +1281,7 @@ function initAnimations() {
                   scrollTrigger: { trigger: '.artisan-grid', start: 'top 85%' } }
             );
         }
+
         const photo = card.querySelector('.artisan-photo');
         card.addEventListener('mousemove', e => {
             const r = card.getBoundingClientRect();
@@ -1263,31 +1301,37 @@ function initAnimations() {
         { y: 0, opacity: 1, duration: 1.1, ease: 'power4.out',
           scrollTrigger: { trigger: '.dev-signature-area', start: 'top 88%' } }
     );
+
     gsap.fromTo('.reviews-head',
         { y: 40, opacity: 0 },
         { y: 0, opacity: 1, duration: 1.1, ease: 'power4.out',
           scrollTrigger: { trigger: '#reviews', start: 'top 82%' } }
     );
+
     gsap.fromTo('.contact-left',
         { x: -50, opacity: 0 },
         { x: 0, opacity: 1, duration: 1.2, ease: 'power4.out',
           scrollTrigger: { trigger: '#contact', start: 'top 80%' } }
     );
+
     gsap.fromTo('.contact-right',
         { x: 50, opacity: 0 },
         { x: 0, opacity: 1, duration: 1.2, delay: 0.15, ease: 'power4.out',
           scrollTrigger: { trigger: '#contact', start: 'top 80%' } }
     );
+
     gsap.fromTo('.contact-info-item',
         { y: 20, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.7, stagger: 0.12, ease: 'power3.out',
           scrollTrigger: { trigger: '.contact-info-items', start: 'top 85%' } }
     );
+
     gsap.fromTo('.contact-field',
         { y: 18, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.6, stagger: 0.1, ease: 'power3.out',
           scrollTrigger: { trigger: '.contact-form', start: 'top 85%' } }
     );
+
     gsap.fromTo('.footer-giant-text',
         { y: 30, opacity: 0 },
         { y: 0, opacity: 1, duration: 1.5, ease: 'power4.out',
@@ -1413,7 +1457,7 @@ document.querySelectorAll('.compact-card').forEach((card, i) => {
 });
 
 // =============================================
-// 14b. COLOR SWATCH PICKER
+// 14. COLOR SWATCH PICKER
 // =============================================
 (function() {
     const swatches = document.querySelectorAll('.vip-swatch');
@@ -1444,5 +1488,80 @@ document.querySelectorAll('.compact-card').forEach((card, i) => {
                 );
             }
         });
+    });
+})();
+
+// =============================================
+// MOBILE HAMBURGER MENU
+// =============================================
+(function() {
+    // Create hamburger button
+    const burger = document.createElement('button');
+    burger.className = 'hamburger-btn';
+    burger.id = 'hamburgerBtn';
+    burger.setAttribute('aria-label', 'Menu');
+    burger.innerHTML = '<span></span><span></span><span></span>';
+
+    // Create mobile menu overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'mobile-menu-overlay';
+    overlay.id = 'mobileMenu';
+
+    // Get nav links and clone them for mobile
+    const navLinks = document.querySelector('.nav-links');
+    if (!navLinks) return;
+
+    const links = navLinks.querySelectorAll('a');
+    let menuHTML = '<div class="mobile-menu-inner">';
+    menuHTML += '<div class="mobile-menu-brand">';
+    menuHTML += '<span class="mobile-menu-tag">Navigation</span>';
+    menuHTML += '</div>';
+    menuHTML += '<nav class="mobile-menu-nav">';
+    links.forEach((link, i) => {
+        menuHTML += '<a href="' + link.getAttribute('href') + '" class="mobile-menu-link smooth-link" style="animation-delay:' + (0.05 * i) + 's">';
+        menuHTML += '<span class="mobile-link-num">0' + (i + 1) + '</span>';
+        menuHTML += '<span class="mobile-link-text">' + link.textContent + '</span>';
+        menuHTML += '</a>';
+    });
+    menuHTML += '</nav>';
+    menuHTML += '<div class="mobile-menu-footer">';
+    menuHTML += '<p>Handmade Luxury from Tanger, Morocco.</p>';
+    menuHTML += '</div>';
+    menuHTML += '</div>';
+    overlay.innerHTML = menuHTML;
+
+    // Insert hamburger before nav-actions
+    const navActions = document.querySelector('.nav-actions');
+    if (navActions) {
+        navActions.parentNode.insertBefore(burger, navActions);
+    }
+    document.body.appendChild(overlay);
+
+    // Toggle menu
+    function toggleMenu() {
+        burger.classList.toggle('active');
+        overlay.classList.toggle('active');
+        document.body.style.overflow = overlay.classList.contains('active') ? 'hidden' : '';
+    }
+
+    burger.addEventListener('click', toggleMenu);
+
+    // Close on link click
+    overlay.querySelectorAll('.mobile-menu-link').forEach(link => {
+        link.addEventListener('click', function() {
+            toggleMenu();
+            // Smooth scroll
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                setTimeout(() => {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }, 300);
+            }
+        });
+    });
+
+    // Close on overlay background click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) toggleMenu();
     });
 })();
